@@ -19,6 +19,7 @@ def draw(pygame, WIN, icon, WIDTH, HEIGHT):
     start = pygame.image.load(join("Assets", "Buttons", "start.png"))
     start_x, start_y = WIDTH//2 - start.get_width()//2, HEIGHT//2 + 100
     WIN.blit(start, (start_x, start_y))
+    pygame.display.update()
 
     global IS_MENU
     for event in pygame.event.get():
