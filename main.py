@@ -1,7 +1,6 @@
 import pygame
 from os import listdir
 from os.path import join
-import menu
 
 pygame.init()
 
@@ -10,7 +9,7 @@ WIDTH, HEIGHT = 1250, 750
 FPS = 30
 OFFSET_X = 0
 BLACK = (0, 0, 0)
-PLAYER_VEL = 10
+PLAYER_VEL = 5
 
 # Window Customisation
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -23,7 +22,7 @@ def flip(imgs):
     ouput_lis = []
 
     for img in imgs:
-        ouput_lis.append(pygame.transform.flip(img, False, True))
+        ouput_lis.append(pygame.transform.flip(img, True, False))
 
     return ouput_lis
 
@@ -59,17 +58,22 @@ def load_sprites(path, width, height, rotations=False, direction=None):
                 frame.blit(sprite_sheet, (0, 0), area_rect)
                 image_lis.append(pygame.transform.scale2x(frame))
                 sprites[file_name] = image_lis
+    return sprites
 
 
 class Player:
+    ANIMATION_DELAY = 3
+
     def __init__(self, x, y, width, height, name):
         self.rect = pygame.Rect(x, y, width, height)
         self.x_vel = 0
         self.y_vel = 0
         self.direction = "right"
         path = join("Assets", "MainCharacters", name)
-        self.sprites = load_sprites(
-            path, width//2, height//2, True, self.direction)
+        self.SPRITES = load_sprites(path, width, height, True, self.direction)
+        self.sprite = None
+        self.state = "Idle"
+        self.animation_count = 0
 
     def move(self):
         self.rect.x += self.x_vel
@@ -79,15 +83,33 @@ class Player:
         self.x_vel = PLAYER_VEL
         if self.direction != "right":
             self.direction = "right"
+            self.animation_count = 0
 
     def move_left(self):
         self.x_vel = -PLAYER_VEL
         if self.direction != "left":
             self.direction = "left"
+            self.animation_count = 0
+
+    def update(self):
+        if self.y_vel == 0:
+            if self.x_vel != 0:
+                self.state = "Run"
+            else:
+                self.state = "Idle"
+        self.animation_count += 1
+
+    def loop(self):
+        self.update()
+        sprite_sheet = self.SPRITES[f"{self.state}_{self.direction}"]
+        sprite_num = (self.animation_count //
+                      self.ANIMATION_DELAY) % len(sprite_sheet)
+        self.sprite = sprite_sheet[sprite_num]
 
     def draw(self):
         self.move()
-        pygame.draw.rect(WIN, BLACK, self.rect)
+        WIN.blit(self.sprite, (self.rect.x, self.rect.y))
+        #pygame.draw.rect(WIN, BLACK, self.rect)
 
 
 class Objects(pygame.sprite.Sprite):
@@ -122,13 +144,14 @@ def draw(player):
 def game_code(player):
     # Insert the main code for the game; calling classes and that sorta stuff!
     handle_player(player)
+    player.loop()
     draw(player)
 
 
 def main():
     run = True
     clock = pygame.time.Clock()
-    player = Player(100, 100, 44, 76, "Clems")
+    player = Player(100, 100, 32, 32, "Pink Man")
     while run:
         clock.tick(FPS)
         for event in pygame.event.get():
