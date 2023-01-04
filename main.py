@@ -2,6 +2,7 @@ import pygame
 from os import listdir
 from os.path import join
 import math
+import random
 
 pygame.init()
 
@@ -186,11 +187,14 @@ def handle_verti_collision(player, objects):
     collided_objects = []
     on_floor = False
     player.rect.y += player.y_vel
+
     for obj in objects:
+        obj.rect.x -= OFFSET_X
         if pygame.sprite.collide_mask(player, obj):
             player.landed(obj)
             on_floor = True
             collided_objects.append(obj)
+        obj.rect.x += OFFSET_X
     if not on_floor:
         player.GRAVITY = 1
     player.rect.y -= player.y_vel
@@ -252,8 +256,9 @@ def main():
     player = Player(500, 0, 32, 32, "Virtual Guy")
 
     floor = [Block(i*block_side, HEIGHT-block_side, block_side)
-             for i in range(-WIDTH//block_side, WIDTH*2//block_side)]
-    floor.append(Block(96*5, 600, 96))
+             for i in range(-WIDTH//block_side, WIDTH*5//block_side)]
+    floor.append(Block(96*5, 300, 96))
+    floor.append(Block(96*3, HEIGHT-(96*2), 96))
 
     while run:
         clock.tick(FPS)
