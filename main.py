@@ -11,7 +11,7 @@ FPS = 30
 OFFSET_X = 0
 BLACK = (0, 0, 0)
 PLAYER_VEL = 5
-BG_COLOR = "Pink"
+BG_COLOR = "Green"
 
 # Window Customisation
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -76,11 +76,18 @@ class Player:
         self.sprite = None
         self.state = "Idle"
         self.animation_count = 0
-        self.GRAVITY = 1
+        self.GRAVITY = self.reset_gravity()
         self.mask = None
+        self.jump_count = 0
+        self.let_move = True
+
+    def reset_gravity(self):
+        gravity = 1
+        return gravity
 
     def move(self):
-        self.rect.x += self.x_vel
+        if self.let_move:
+            self.rect.x += self.x_vel
         self.rect.y += self.y_vel
 
     def move_right(self):
@@ -95,9 +102,21 @@ class Player:
             self.direction = "left"
             self.animation_count = 0
 
+    def jump(self):
+        self.jump_count += 1
+        self.GRAVITY = self.reset_gravity()
+        if self.jump_count == 1:
+            self.y_vel += -self.GRAVITY * 25
+        else:
+            pass
+
     def update_state(self):
-        if self.x_vel != 0:
+        if self.y_vel < 0:
+            self.state = "Jump"
+        elif self.x_vel != 0:
             self.state = "Run"
+        elif self.y_vel > 2:
+            self.state = "Fall"
         else:
             self.state = "Idle"
         self.animation_count += 1
@@ -106,9 +125,11 @@ class Player:
                       self.ANIMATION_DELAY) % len(sprite_sheet)
         self.sprite = sprite_sheet[sprite_num]
 
-    def landed(self):
+    def landed(self, obj):
         self.y_vel = 0
         self.GRAVITY = 0
+        self.jump_count = 0
+        self.rect.bottom = obj.rect.top
 
     def update(self):
         self.rect = self.sprite.get_rect(topleft=(self.rect.x, self.rect.y))
@@ -145,7 +166,7 @@ class Block(Objects):
         self.mask = pygame.mask.from_surface(self.image)
 
     def load_block(self):
-        self.skin_name = "Earth"
+        self.skin_name = "Pinky"
         path = join("Assets", "Terrain", f"{self.skin_name}.png")
         return pygame.transform.scale2x(pygame.image.load(path))
 
@@ -157,17 +178,39 @@ def handle_player(player):
         player.move_right()
     if keys[pygame.K_LEFT]:
         player.move_left()
+    if keys[pygame.K_SPACE]:
+        player.jump()
 
 
 def handle_verti_collision(player, objects):
+    collided_objects = []
+    on_floor = False
+    player.rect.y += player.y_vel
     for obj in objects:
         if pygame.sprite.collide_mask(player, obj):
-            player.landed()
-            player.rect.bottom = obj.rect.top
+            player.landed(obj)
+            on_floor = True
+            collided_objects.append(obj)
+    if not on_floor:
+        player.GRAVITY = 1
+    player.rect.y -= player.y_vel
 
 
-def scroll_bg():
-    pass
+def scroll_bg(player, floor):
+    global OFFSET_X
+    keys = pygame.key.get_pressed()
+    if player.rect.x > WIDTH - 190 and player.direction == "right":
+        if keys[pygame.K_RIGHT]:
+            OFFSET_X += PLAYER_VEL
+        player.let_move = False
+
+    elif player.rect.x < 100 and player.direction == "left":
+        if keys[pygame.K_LEFT]:
+            OFFSET_X -= PLAYER_VEL
+        player.let_move = False
+
+    else:
+        player.let_move = True
 
 
 def generate_bg():
@@ -186,15 +229,16 @@ def draw(player, floor):
     # The Floor
 
     for block in floor:
-        WIN.blit(block.image, (block.rect.x, block.rect.y))
+        WIN.blit(block.image, (block.rect.x - OFFSET_X, block.rect.y))
 
     pygame.display.update()
 
 
 def game_code(player, floor):
     handle_player(player)
-    player.loop()
 
+    player.loop()
+    scroll_bg(player, floor)
     draw(player, floor)
 
 
@@ -205,10 +249,11 @@ def main():
     # Classes
     block_side = 96
 
-    player = Player(0, 0, 32, 32, "Pink Man")
+    player = Player(500, 0, 32, 32, "Virtual Guy")
 
     floor = [Block(i*block_side, HEIGHT-block_side, block_side)
-             for i in range(-WIDTH, WIDTH*2)]
+             for i in range(-WIDTH//block_side, WIDTH*2//block_side)]
+    floor.append(Block(96*5, 600, 96))
 
     while run:
         clock.tick(FPS)
