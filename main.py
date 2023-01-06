@@ -8,7 +8,7 @@ pygame.init()
 
 # Game Variables
 WIDTH, HEIGHT = 1250, 750
-FPS = 30
+FPS = 40
 OFFSET_X = 0
 BLACK = (0, 0, 0)
 PLAYER_VEL = 5
@@ -136,6 +136,9 @@ class Player:
         self.rect = self.sprite.get_rect(topleft=(self.rect.x, self.rect.y))
         self.mask = pygame.mask.from_surface(self.sprite)
 
+    def hit_head(self):
+        self.y_vel *= -1
+
     def loop(self):
         self.y_vel += self.GRAVITY
         self.update_state()
@@ -172,15 +175,38 @@ class Block(Objects):
         return pygame.transform.scale2x(pygame.image.load(path))
 
 
-def handle_player(player):
+def collide(player, floor, dx):
+    collided_obj = None
+    player.rect.x += dx
+    player.update()
+    for obj in floor:
+        obj.rect.x -= OFFSET_X
+        if pygame.sprite.collide_mask(player, obj):
+            collided_obj = obj
+            obj.rect.x += OFFSET_X
+            break
+        else:
+            pass
+        obj.rect.x += OFFSET_X
+    player.rect.x -= dx
+    player.update()
+    return collided_obj
+
+
+def handle_player(player, floor):
     player.x_vel = 0
     keys = pygame.key.get_pressed()
-    if keys[pygame.K_RIGHT]:
+
+    right_collide = collide(player, floor, PLAYER_VEL*2)
+    left_collide = collide(player, floor, -PLAYER_VEL*2)
+    if keys[pygame.K_RIGHT] and not right_collide:
         player.move_right()
-    if keys[pygame.K_LEFT]:
+    if keys[pygame.K_LEFT] and not left_collide:
         player.move_left()
     if keys[pygame.K_SPACE]:
         player.jump()
+
+    handle_verti_collision(player, floor)
 
 
 def handle_verti_collision(player, objects):
@@ -191,16 +217,20 @@ def handle_verti_collision(player, objects):
     for obj in objects:
         obj.rect.x -= OFFSET_X
         if pygame.sprite.collide_mask(player, obj):
-            player.landed(obj)
-            on_floor = True
-            collided_objects.append(obj)
+            if player.y_vel > 0:
+                player.landed(obj)
+                on_floor = True
+            else:
+                player.hit_head()
+                collided_objects.append(obj)
         obj.rect.x += OFFSET_X
     if not on_floor:
         player.GRAVITY = 1
     player.rect.y -= player.y_vel
+    return collided_objects, on_floor
 
 
-def scroll_bg(player, floor):
+def scroll_bg(player):
     global OFFSET_X
     keys = pygame.key.get_pressed()
     if player.rect.x > WIDTH - 190 and player.direction == "right":
@@ -227,7 +257,7 @@ def generate_bg():
 
 def draw(player, floor):
     generate_bg()
-    handle_verti_collision(player, floor)
+
     player.draw()
 
     # The Floor
@@ -239,10 +269,10 @@ def draw(player, floor):
 
 
 def game_code(player, floor):
-    handle_player(player)
 
     player.loop()
-    scroll_bg(player, floor)
+    handle_player(player, floor)
+    scroll_bg(player)
     draw(player, floor)
 
 
@@ -253,7 +283,7 @@ def main():
     # Classes
     block_side = 96
 
-    player = Player(500, 0, 32, 32, "Virtual Guy")
+    player = Player(500, 0, 32, 32, "Mask Dude")
 
     floor = [Block(i*block_side, HEIGHT-block_side, block_side)
              for i in range(-WIDTH//block_side, WIDTH*5//block_side)]
