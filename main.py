@@ -72,6 +72,7 @@ class Player:
         self.rect = pygame.Rect(x, y, width*2, height*2)
         self.x_vel = 0
         self.y_vel = 0
+        self.jump_vel = 25
         self.direction = "right"
         path = join("Assets", "MainCharacters", name)
         self.SPRITES = load_sprites(path, width, height, True, self.direction)
@@ -81,14 +82,12 @@ class Player:
         self.GRAVITY = self.reset_gravity()
         self.mask = None
         self.jump_count = 0
-        self.let_move = True
 
     def reset_gravity(self):
         gravity = 1
         return gravity
 
     def move(self):
-        # if self.let_move:
         self.rect.x += self.x_vel
         self.rect.y += self.y_vel
 
@@ -108,7 +107,7 @@ class Player:
         self.jump_count += 1
         self.GRAVITY = self.reset_gravity()
         if self.jump_count == 1:
-            self.y_vel += -self.GRAVITY * 25
+            self.y_vel += -self.GRAVITY * self.jump_vel
         else:
             pass
 
@@ -176,11 +175,11 @@ class Block(Objects):
         return pygame.transform.scale2x(pygame.image.load(path))
 
 
-def collide(player, floor, dx):
+def collide(player, objects, dx):
     collided_obj = None
     player.rect.x += dx
     player.update()
-    for obj in floor:
+    for obj in objects:
         #obj.rect.x += OFFSET_X
         if pygame.sprite.collide_mask(player, obj):
             collided_obj = obj
@@ -194,12 +193,12 @@ def collide(player, floor, dx):
     return collided_obj
 
 
-def handle_player(player, floor):
+def handle_player(player, objects):
     player.x_vel = 0
     keys = pygame.key.get_pressed()
 
-    right_collide = collide(player, floor, PLAYER_VEL)
-    left_collide = collide(player, floor, -PLAYER_VEL)
+    right_collide = collide(player, objects, PLAYER_VEL)
+    left_collide = collide(player, objects, -PLAYER_VEL)
 
     if keys[pygame.K_RIGHT] and not right_collide:
         player.move_right()
@@ -208,12 +207,12 @@ def handle_player(player, floor):
     if keys[pygame.K_SPACE]:
         player.jump()
 
-    handle_verti_collision(player, floor)
+    handle_verti_collision(player, objects)
 
 
 def handle_verti_collision(player, objects):
     collided_objects = []
-    on_floor = False
+    on_objects = False
     player.rect.y += player.y_vel
 
     for obj in objects:
@@ -221,15 +220,15 @@ def handle_verti_collision(player, objects):
         if pygame.sprite.collide_mask(player, obj):
             if player.y_vel > 0:
                 player.landed(obj)
-                on_floor = True
+                on_objects = True
             else:
                 player.hit_head()
             collided_objects.append(obj)
         #obj.rect.x -= OFFSET_X
-    if not on_floor:
+    if not on_objects:
         player.GRAVITY = 1
     player.rect.y -= player.y_vel
-    return collided_objects, on_floor
+    return collided_objects, on_objects
 
 
 def scroll_bg(player):
@@ -238,15 +237,12 @@ def scroll_bg(player):
     if (player.rect.x + OFFSET_X) > WIDTH - 190 and player.direction == "right":
         if keys[pygame.K_RIGHT]:
             OFFSET_X -= PLAYER_VEL
-        #player.let_move = False
 
     elif (player.rect.x + OFFSET_X) < 100 and player.direction == "left":
         if keys[pygame.K_LEFT]:
             OFFSET_X += PLAYER_VEL
-        #player.let_move = False
 
     else:
-        #player.let_move = True
         pass
 
 
@@ -258,37 +254,38 @@ def generate_bg():
             WIN.blit(piece, (col*piece.get_height(), row*piece.get_width()))
 
 
-def draw(player, floor):
+def draw(player, objects):
     generate_bg()
 
     player.draw()
 
-    # The Floor
+    # The objects
 
-    for block in floor:
+    for block in objects:
         block.draw()
 
     pygame.display.update()
 
 
-def game_code(player, floor):
+def game_code(player, objects):
 
     player.loop()
-    handle_player(player, floor)
+    handle_player(player, objects)
     scroll_bg(player)
-    draw(player, floor)
+    draw(player, objects)
 
 
 def main():
     run = True
     clock = pygame.time.Clock()
 
-    level, floor = set_level(Block, WIDTH, HEIGHT)
+    player = Player(500, 0, 32, 32, "Mask Dude")
+
+    level, objects = set_level(
+        Block, WIDTH, HEIGHT, player.jump_vel, player.GRAVITY)
 
     # Classes
     block_side = 96
-
-    player = Player(500, 0, 32, 32, "Mask Dude")
 
     while run:
         clock.tick(FPS)
@@ -298,7 +295,7 @@ def main():
         # if menu.IS_MENU:
             #menu.draw(pygame, WIN, icon, WIDTH, HEIGHT)
         # else:
-        game_code(player, floor)
+        game_code(player, objects)
 
 
 if __name__ == "__main__":
