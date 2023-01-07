@@ -3,12 +3,13 @@ from os import listdir
 from os.path import join
 import math
 import random
+from levels import *
 
 pygame.init()
 
 # Game Variables
 WIDTH, HEIGHT = 1250, 750
-FPS = 40
+FPS = 30
 OFFSET_X = 0
 BLACK = (0, 0, 0)
 PLAYER_VEL = 5
@@ -87,8 +88,8 @@ class Player:
         return gravity
 
     def move(self):
-        if self.let_move:
-            self.rect.x += self.x_vel
+        # if self.let_move:
+        self.rect.x += self.x_vel
         self.rect.y += self.y_vel
 
     def move_right(self):
@@ -146,7 +147,7 @@ class Player:
 
     def draw(self):
         self.move()
-        WIN.blit(self.sprite, (self.rect.x, self.rect.y))
+        WIN.blit(self.sprite, (self.rect.x + OFFSET_X, self.rect.y))
 
 
 class Objects(pygame.sprite.Sprite):
@@ -159,7 +160,7 @@ class Objects(pygame.sprite.Sprite):
         self.name = name
 
     def draw(self):
-        WIN.blit(self.image, (self.rect.x, self.rect.y))
+        WIN.blit(self.image, (self.rect.x + OFFSET_X, self.rect.y))
 
 
 class Block(Objects):
@@ -180,14 +181,14 @@ def collide(player, floor, dx):
     player.rect.x += dx
     player.update()
     for obj in floor:
-        obj.rect.x -= OFFSET_X
+        #obj.rect.x += OFFSET_X
         if pygame.sprite.collide_mask(player, obj):
             collided_obj = obj
-            obj.rect.x += OFFSET_X
+            #obj.rect.x -= OFFSET_X
             break
         else:
             pass
-        obj.rect.x += OFFSET_X
+        #obj.rect.x -= OFFSET_X
     player.rect.x -= dx
     player.update()
     return collided_obj
@@ -197,8 +198,9 @@ def handle_player(player, floor):
     player.x_vel = 0
     keys = pygame.key.get_pressed()
 
-    right_collide = collide(player, floor, PLAYER_VEL*2)
-    left_collide = collide(player, floor, -PLAYER_VEL*2)
+    right_collide = collide(player, floor, PLAYER_VEL)
+    left_collide = collide(player, floor, -PLAYER_VEL)
+
     if keys[pygame.K_RIGHT] and not right_collide:
         player.move_right()
     if keys[pygame.K_LEFT] and not left_collide:
@@ -215,15 +217,15 @@ def handle_verti_collision(player, objects):
     player.rect.y += player.y_vel
 
     for obj in objects:
-        obj.rect.x -= OFFSET_X
+        #obj.rect.x += OFFSET_X
         if pygame.sprite.collide_mask(player, obj):
             if player.y_vel > 0:
                 player.landed(obj)
                 on_floor = True
             else:
                 player.hit_head()
-                collided_objects.append(obj)
-        obj.rect.x += OFFSET_X
+            collided_objects.append(obj)
+        #obj.rect.x -= OFFSET_X
     if not on_floor:
         player.GRAVITY = 1
     player.rect.y -= player.y_vel
@@ -233,18 +235,19 @@ def handle_verti_collision(player, objects):
 def scroll_bg(player):
     global OFFSET_X
     keys = pygame.key.get_pressed()
-    if player.rect.x > WIDTH - 190 and player.direction == "right":
+    if (player.rect.x + OFFSET_X) > WIDTH - 190 and player.direction == "right":
         if keys[pygame.K_RIGHT]:
-            OFFSET_X += PLAYER_VEL
-        player.let_move = False
-
-    elif player.rect.x < 100 and player.direction == "left":
-        if keys[pygame.K_LEFT]:
             OFFSET_X -= PLAYER_VEL
-        player.let_move = False
+        #player.let_move = False
+
+    elif (player.rect.x + OFFSET_X) < 100 and player.direction == "left":
+        if keys[pygame.K_LEFT]:
+            OFFSET_X += PLAYER_VEL
+        #player.let_move = False
 
     else:
-        player.let_move = True
+        #player.let_move = True
+        pass
 
 
 def generate_bg():
@@ -263,7 +266,7 @@ def draw(player, floor):
     # The Floor
 
     for block in floor:
-        WIN.blit(block.image, (block.rect.x - OFFSET_X, block.rect.y))
+        block.draw()
 
     pygame.display.update()
 
@@ -280,15 +283,12 @@ def main():
     run = True
     clock = pygame.time.Clock()
 
+    level, floor = set_level(Block, WIDTH, HEIGHT)
+
     # Classes
     block_side = 96
 
     player = Player(500, 0, 32, 32, "Mask Dude")
-
-    floor = [Block(i*block_side, HEIGHT-block_side, block_side)
-             for i in range(-WIDTH//block_side, WIDTH*5//block_side)]
-    floor.append(Block(96*5, 300, 96))
-    floor.append(Block(96*3, HEIGHT-(96*2), 96))
 
     while run:
         clock.tick(FPS)
