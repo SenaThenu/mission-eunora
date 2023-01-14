@@ -174,61 +174,143 @@ class Block(Objects):
         path = join("Assets", "Terrain", f"{self.skin_name}.png")
         return pygame.transform.scale2x(pygame.image.load(path))
 
+    def update_skin(self):
+        pass
 
-def collide(player, objects, dx):
+
+class Fruit(Objects):
+    def __init__(self, x, y, side, name):
+        super().__init__(x, y, side, side, name)
+        self.frames, self.vanished, self.n_sprites = self.load_img()
+        self.count = 0
+        self.under_collection = False
+        self.collected = False
+        self.delete = False
+
+    def update_skin(self):
+        if not self.under_collection:
+            self.image = self.frames[self.count]
+            self.count += 1
+            if self.count >= self.n_sprites:
+                self.count = 0
+        else:
+            self.image = self.vanished[self.count]
+            self.count += 1
+            if self.count > 5:
+                self.collected = True
+        self.mask = pygame.mask.from_surface(self.image)
+
+    def load_img(self):
+        path = join("Assets", "Items", "Fruits", f"{self.name}.png")
+        frames = []
+        sprite_sheet = pygame.image.load(path)
+        n_sprites = int(sprite_sheet.get_width() /
+                        sprite_sheet.get_height())
+        for i in range(n_sprites):
+            surface = pygame.Surface(
+                (self.width/2, self.height/2), pygame.SRCALPHA)
+            area_rect = pygame.Rect(
+                i*sprite_sheet.get_height(), 0, self.width, self.height)
+            surface.blit(sprite_sheet, (0, 0), area_rect)
+            frames.append(pygame.transform.scale2x(surface))
+        vanished = []
+        path = join("Assets", "Items", "Fruits", "Collected.png")
+        vanished_sheet = pygame.image.load(path)
+        for i in range(vanished_sheet.get_width()//vanished_sheet.get_height()):
+            surface = pygame.Surface(
+                (vanished_sheet.get_height(), vanished_sheet.get_height()), pygame.SRCALPHA)
+            area_rect = pygame.Rect(
+                i*vanished_sheet.get_height(), 0, self.width, self.height)
+            surface.blit(vanished_sheet, (0, 0), area_rect)
+            vanished.append(pygame.transform.scale2x(surface))
+        return frames, vanished, n_sprites
+
+
+def handle_verti_collision(player, objects):
+    collided_obj = None
+    on_objects = False
+    player.rect.y += player.y_vel
+
+    for obj in objects:
+        if pygame.sprite.collide_mask(player, obj):
+            if obj.name == "Block":
+                if player.y_vel > 0:
+                    player.landed(obj)
+                    on_objects = True
+                    break
+                else:
+                    player.hit_head()
+                    break
+            collided_obj = obj
+    if not on_objects:
+        player.GRAVITY = 1
+    player.rect.y -= player.y_vel
+    return collided_obj
+
+
+def collide(player, objects, dx, fruit_names):
     collided_obj = None
     player.rect.x += dx
     player.update()
     for obj in objects:
-        #obj.rect.x += OFFSET_X
         if pygame.sprite.collide_mask(player, obj):
-            collided_obj = obj
-            #obj.rect.x -= OFFSET_X
-            break
+            if obj.name in fruit_names:
+                if not obj.collected:
+                    collided_obj = obj
+                    break
+                else:
+                    pass
+            else:
+                collided_obj = obj
+                break
         else:
             pass
-        #obj.rect.x -= OFFSET_X
     player.rect.x -= dx
     player.update()
     return collided_obj
 
 
-def handle_player(player, objects):
+def handle_overall_collision(collided_objs, fruits_names):
+    for obj in collided_objs:
+        if obj != None:
+            if obj.name in fruits_names:
+                if obj.under_collection != True:
+                    obj.under_collection = True
+                    obj.count = 0
+    else:
+        pass
+
+
+def handle_player(player, objects, fruit_names, fruits):
     player.x_vel = 0
     keys = pygame.key.get_pressed()
 
-    right_collide = collide(player, objects, PLAYER_VEL)
-    left_collide = collide(player, objects, -PLAYER_VEL)
+    right_collide = collide(player, objects, PLAYER_VEL, fruit_names)
+    left_collide = collide(player, objects, -PLAYER_VEL, fruit_names)
 
-    if keys[pygame.K_RIGHT] and not right_collide:
-        player.move_right()
-    if keys[pygame.K_LEFT] and not left_collide:
-        player.move_left()
+    if keys[pygame.K_RIGHT]:
+        if right_collide != None:
+            if right_collide.name != "Block":
+                player.move_right()
+            else:
+                pass
+        else:
+            player.move_right()
+    if keys[pygame.K_LEFT]:
+        if left_collide != None:
+            if left_collide.name != "Block":
+                player.move_left()
+            else:
+                pass
+        else:
+            player.move_left()
     if keys[pygame.K_SPACE]:
         player.jump()
 
-    handle_verti_collision(player, objects)
+    verti_collide = handle_verti_collision(player, objects)
 
-
-def handle_verti_collision(player, objects):
-    collided_objects = []
-    on_objects = False
-    player.rect.y += player.y_vel
-
-    for obj in objects:
-        #obj.rect.x += OFFSET_X
-        if pygame.sprite.collide_mask(player, obj):
-            if player.y_vel > 0:
-                player.landed(obj)
-                on_objects = True
-            else:
-                player.hit_head()
-            collided_objects.append(obj)
-        #obj.rect.x -= OFFSET_X
-    if not on_objects:
-        player.GRAVITY = 1
-    player.rect.y -= player.y_vel
-    return collided_objects, on_objects
+    collided_objs = [right_collide, left_collide, verti_collide]
+    handle_overall_collision(collided_objs, fruit_names)
 
 
 def scroll_bg(player):
@@ -254,25 +336,32 @@ def generate_bg():
             WIN.blit(piece, (col*piece.get_height(), row*piece.get_width()))
 
 
-def draw(player, objects):
+def draw(player, objects, fruit_names, fruits):
     generate_bg()
 
     player.draw()
 
     # The objects
 
-    for block in objects:
-        block.draw()
+    for obj in objects:
+        if obj.name in fruit_names:
+            if not obj.collected:
+                obj.update_skin()
+                obj.draw()
+            else:
+                pass
+        else:
+            obj.draw()
 
     pygame.display.update()
 
 
-def game_code(player, objects):
+def game_code(player, objects, fruit_names, fruits):
 
     player.loop()
-    handle_player(player, objects)
+    handle_player(player, objects, fruit_names, fruits)
     scroll_bg(player)
-    draw(player, objects)
+    draw(player, objects, fruit_names, fruits)
 
 
 def main():
@@ -281,11 +370,19 @@ def main():
 
     player = Player(500, 0, 32, 32, "Mask Dude")
 
-    level, objects = set_level(
+    # Game Objs Definition
+
+    terrain, n_golden, sky_ward = set_level(
         Block, WIDTH, HEIGHT, player.jump_vel, player.GRAVITY)
 
-    # Classes
-    block_side = 96
+    ordinary_fruits = ["Bananas", "Apple", "Cherries"]
+    fruit_side = 64
+    fruits = []
+    for block in sky_ward:
+        fruit = random.choice(ordinary_fruits)
+        x = math.ceil(block.rect.x + (96/2 - (fruit_side/2)))
+        y = block.rect.y - fruit_side
+        fruits.append(Fruit(x, y, fruit_side, fruit))
 
     while run:
         clock.tick(FPS)
@@ -293,9 +390,10 @@ def main():
             if event.type == pygame.QUIT:
                 run = False
         # if menu.IS_MENU:
-            #menu.draw(pygame, WIN, icon, WIDTH, HEIGHT)
+            # menu.draw(pygame, WIN, icon, WIDTH, HEIGHT)
         # else:
-        game_code(player, objects)
+        objects = [*terrain, *fruits]
+        game_code(player, objects, ordinary_fruits, fruits)
 
 
 if __name__ == "__main__":
