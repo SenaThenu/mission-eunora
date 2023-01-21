@@ -19,6 +19,7 @@ FONT = pygame.font.Font(font_path, 48)
 N_IN_BASKET = 3
 FRUIT_COUNT = 0
 GOLDEN_FRUIT_COUNT = 0
+N_LIVES = 5
 
 # Window Customisation
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -75,7 +76,6 @@ class Player:
 
     def __init__(self, x, y, width, height, name):
         self.rect = pygame.Rect(x, y, width*2, height*2)
-        self.health = 5
         self.x_vel = 0
         self.y_vel = 0
         self.jump_vel = 25
@@ -233,86 +233,71 @@ class Fruit(Objects):
 
 
 class Enemies():
-    def __init__(self, x, y, width, height, specific_name, range_activation=False):
+    def __init__(self, x, y, name, range_activation=False):
         self.health = 5
         self.animation_delay = 3
         self.count = 0
-        self.hit_player = False
-        self.back_down = 150
-
-        self.width = width
-        self.height = height
         self.name = "Enemy"
+
+        self.specific_name = name
+        if self.specific_name == "Rino":
+            self.width, self.height = 104, 68
+        elif self.specific_name == "Angry Pig":
+            self.width, self.height = 72, 60
+        elif self.specific_name == "Ghost":
+            self.width, self.height = 88, 30
+        elif self.specific_name == "Slime":
+            self.width, self.height = 88, 30
+        elif self.specific_name == "Rocks":
+            self.width, self.height = 76, 68
 
         self.starting_x = x
 
         self.rect = pygame.Rect(x, y, self.width, self.height)
-        path = join("Assets", "Enemies", specific_name)
-        self.direction = "left"
+        path = join("Assets", "Enemies", self.specific_name)
+        self.direction = "right"
         self.sprites = load_sprites(
             path, self.width, self.height, True, self.direction)
-        self.state = "Run"
 
         self.activation_area = 200
 
-        self.image = self.sprites[f"{self.state}_{self.direction}"][self.count //
-                                                                    self.animation_delay]
+        self.image = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+
+        self.state = "Idle"
 
         self.vel = 5
-        self.opposite_vel = {"right": self.vel,
-                             "left": -self.vel}
+
+        self.in_range_activation = range_activation
 
     def wander(self):
-
-        if self.rect.x == self.starting_x + self.activation_area:
-            self.direction = "left"
-        elif self.rect.x == self.starting_x - self.activation_area:
-            self.direction = "right"
-
-        self.rect.x += self.opposite_vel.get(self.direction)
-
-    def haste(self):
-        if self.direction == "left":
-            self.rect.x -= self.vel * 2
+        opposite_dir = {"right": "left",
+                        "left": "right"}
+        if self.direction == "right" and self.rect.x < self.starting_x + self.activation_area:
+            self.rect.x += self.vel
+        elif self.direction == "left" and self.rect.x > self.starting_x - self.activation_area:
+            self.rect.x -= self.vel
         else:
-            self.rect.x += self.vel * 2
+            self.direction = opposite_dir.get(self.direction)
 
-    def in_range_activation(self, player_x, player_y):
+    def in_range_activation(self, player_x):
         if player_x > self.rect.x-self.activation_area and player_x < self.rect.x + self.activation_area:
-            if player_x < self.rect.x and player_y + 25 > self.rect.y:
+            if player_x < self.rect.x:
+                self.state = "Run"
                 self.direction = "left"
-                return True
-            elif player_x > self.rect.x and player_y + 25 > self.rect.y:
-                self.direction = "right"
-                return True
             else:
-                return False
+                self.state = "Run"
+                self.direction = "right"
         else:
-            return False
+            self.state = "Walk"
 
-    def draw(self, player_x, player_y):
+    def draw(self, player_x):
+        self.wander()
+        # self.in_range_activation(player_x)
         self.sprite_sheet = self.sprites[f"{self.state}_{self.direction}"]
-        index = self.count // self.animation_delay % len(self.sprite_sheet)
-        self.image = self.sprite_sheet[index]
-        WIN.blit(self.image, (self.rect.x + OFFSET_X, self.rect.y))
+        self.image.blit(self.sprite_sheet[self.count %
+                        len(self.sprite_sheet)], (0, 0))
 
-        self.count += 1
-        hit_opposite = {"left": (self.count+1) * 10,
-                        "right": (-self.count-1) * 10}
-        if self.hit_player:
-            self.rect.x += hit_opposite.get(self.direction)
-
-        if self.state == "Hit Player" and self.count >= len(self.sprite_sheet):
-            self.state = "Run"
-            self.count = 0
-            self.hit_player = False
-
-        activated = self.in_range_activation(player_x, player_y)
-
-        if not activated:
-            self.wander()
-        else:
-            self.haste()
+        WIN.blit(self.image, (self.rect.x, self.rect.y))
 
 
 class Collectible(Objects):
@@ -350,6 +335,9 @@ def handle_verti_collision(player, objects):
                 else:
                     player.hit_head()
                     break
+            elif obj.name == "Enemy":
+                obj.health -= 1
+                break
             collided_obj = obj
     if not on_objects:
         player.GRAVITY = 1
@@ -398,23 +386,7 @@ def handle_player(player, objects, fruit_names):
 
     right_collide = collide(player, objects, PLAYER_VEL, fruit_names)
     left_collide = collide(player, objects, -PLAYER_VEL, fruit_names)
-    verti_collide = handle_verti_collision(player, objects)
 
-    # Health
-    if right_collide != None:
-        if right_collide.name == "Enemy":
-            player.health -= 1
-            right_collide.hit_player = True
-            right_collide.state = "Hit Player"
-            right_collide.count = 0
-    if left_collide != None:
-        if left_collide.name == "Enemy":
-            player.health -= 1
-            left_collide.hit_player = True
-            left_collide.state = "Hit Player"
-            left_collide.count = 0
-
-    # Motion
     if keys[pygame.K_RIGHT]:
         if right_collide != None:
             if right_collide.name != "Block":
@@ -433,6 +405,8 @@ def handle_player(player, objects, fruit_names):
             player.move_left()
     if keys[pygame.K_SPACE]:
         player.jump()
+
+    verti_collide = handle_verti_collision(player, objects)
 
     collided_objs = [right_collide, left_collide, verti_collide]
     handle_overall_collision(collided_objs, fruit_names)
@@ -476,7 +450,7 @@ def draw(player, objects, fruit_names):
             else:
                 pass
         elif obj.name == "Enemy":
-            obj.draw(player.rect.x, player.rect.y)
+            obj.draw(player.rect.x)
         else:
             obj.draw()
 
@@ -492,12 +466,12 @@ def draw(player, objects, fruit_names):
 
     # Lives
     heart = pygame.image.load(join("Assets", "Items", "Heart.png"))
-    font_face = FONT.render(str(player.health), True, BLACK)
+    font_face = FONT.render(str(N_LIVES), True, BLACK)
     WIN.blit(heart, (0, 0))
     WIN.blit(font_face, (heart.get_width(), 0))
     pygame.display.update()
 
-    if player.health <= 0:
+    if N_LIVES <= 0:
         pygame.time.delay(100)
         quit()
 
@@ -517,11 +491,9 @@ def main():
 
     # Game Objs Definition
 
-    # Blocks
     terrain, n_golden, sky_ward = set_level(
         Block, WIDTH, HEIGHT, player.jump_vel, player.GRAVITY)
 
-    # Fruits
     ordinary_fruits = ["Kiwi", "Apple", "Cherries",
                        "Bananas", "Melon", "Pineapple", "Strawberry"]
     fruit_side = 64
@@ -533,19 +505,7 @@ def main():
         y = block.rect.y - fruit_side
         fruits.append(Fruit(x, y, fruit_side, fruit))
 
-    # Enemies
-    enemy_name = "AngryPig"
-    if enemy_name == "Rino":
-        width, height = 52, 34
-    elif enemy_name == "AngryPig":
-        width, height = 36, 30
-    elif enemy_name == "Ghost":
-        width, height = 44, 15
-    elif enemy_name == "Slime":
-        width, height = 44, 15
-    elif enemy_name == "Rocks":
-        width, height = 38, 34
-    enemy = Enemies(500, HEIGHT-96-height*2, width, height, enemy_name, True)
+    enemy = Enemies(250, HEIGHT-100, "Rino", True)
 
     while run:
         clock.tick(FPS)
