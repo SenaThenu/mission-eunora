@@ -10,25 +10,78 @@ pygame.init()
 # TODO: Please fix the bug when the bullets go outta range...
 
 # Game Variables
-WIDTH, HEIGHT = 1250, 750
+WIDTH, HEIGHT = 1200, 750
 FPS = 30
 OFFSET_X = 0
 BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
 PLAYER_VEL = 5
-BG_COLOR = "Green"
-font_path = join("Assets", "Fonts", "Sunny_Spells.otf")
-FONT = pygame.font.Font(font_path, 48)
-N_IN_BASKET = 3
-FRUIT_COUNT = 0
-GOLDEN_FRUIT_COUNT = 0
+PLAYER_HEALTH = 5
+
+FONT = pygame.font.SysFont("Agency FB", 48)
+
+# Physics
 GRAVITY = 1
 JUMP_ANGLE = 45
+RESPAWN_POINTS = []
+RESPAWNED = 0
 
+GAME_OVER = False
+
+# Fruit Stuff
+f = open("fruit_count.txt", "r")
+f_count = f.read()
+FRUIT_COUNT = int(f_count)
 # Window Customisation
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Mission Eunora")
-icon = pygame.image.load("icon.png")
+icon = pygame.image.load(join("Assets", "Icon.png"))
 pygame.display.set_icon(icon)
+
+# Defining Menus
+START_MENU = True
+LEVELS_MENU = False
+MAP_MENU = False
+GAME_START = False
+
+
+def set_up_menu(name):
+    global START_MENU, LEVELS_MENU, MAP_MENU, GAME_START
+    if name.lower() == "start":
+        START_MENU = True
+        LEVELS_MENU = False
+        MAP_MENU = False
+        GAME_START = False
+    elif name.lower() == "levels":
+        START_MENU = False
+        LEVELS_MENU = True
+        MAP_MENU = False
+        GAME_START = False
+    elif name.lower() == "map":
+        START_MENU = False
+        LEVELS_MENU = False
+        MAP_MENU = True
+        GAME_START = False
+    elif name.lower() == "back":
+        START_MENU = True
+        LEVELS_MENU = False
+        MAP_MENU = False
+        GAME_START = False
+    elif name.lower() == "play":
+        START_MENU = False
+        LEVELS_MENU = False
+        MAP_MENU = False
+        GAME_START = True
+
+
+def replay():
+    set_up_menu("play")
+    main()
+
+
+def reset_OFFSET(custom=0):
+    global OFFSET_X
+    OFFSET_X = custom
 
 
 def flip(imgs):
@@ -73,6 +126,80 @@ def load_sprites(path, width, height, rotations=False, direction=None):
                 sprites[file_name] = image_lis
     return sprites
 
+# In Menus, only the first letter is capital...
+
+
+def check_button_click(x, y, width, height, clicked):
+    pressed = False
+    mx, my = clicked
+    if mx > x and mx < (x + width):
+        if my > y and my < (y+height):
+            pressed = True
+    return pressed
+
+
+class Menus:
+    def __init__(self, space_between):
+        self.space_between = space_between
+        self.default_path = join("Assets", "Menus")
+
+    def refresh_screen(self):
+        pygame.time.delay(100)
+        pygame.display.update()
+
+    def set_up_button(self, name, path, pressed, y):
+        bt = pygame.image.load(join(path, f"{name}_button.png"))
+        bt_x, bt_y = WIDTH//2 - bt.get_width()//2, y
+        bt_pressed = check_button_click(
+            bt_x, y, bt.get_width(), bt.get_height(), pressed)
+        if bt_pressed:
+            bt = pygame.image.load(join(path, f"{name}_pressed.png"))
+            set_up_menu(name)
+        else:
+            pass
+        WIN.blit(bt, (bt_x, bt_y))
+        return y + bt.get_height()
+
+    def load_bg(self, path):
+        bg = pygame.image.load(join(path, "bg.jpg"))
+        WIN.blit(bg, (0, 0))
+
+    def start(self, clicked):
+        path = join(self.default_path, "Start Menu")
+        self.load_bg(path)
+
+        logo = pygame.image.load(join(path, "Logo.png"))
+        logo_x, logo_y = WIDTH//2 - logo.get_width()//2, HEIGHT//2 - \
+            self.space_between//2 - logo.get_height()
+
+        WIN.blit(logo, (logo_x, logo_y))
+
+        y = HEIGHT//2 + self.space_between//2
+
+        y = self.set_up_button("Play", path, clicked, y)
+        y = self.set_up_button("Levels", path, clicked, y+10)
+        y = self.set_up_button("Map", path, clicked, y+10)
+
+        self.refresh_screen()
+
+    def map(self, level, clicked):
+        path = join(self.default_path, "Map")
+        self.load_bg(path)
+        map_img = pygame.image.load(join(path, f"{level-1}.png"))
+        WIN.blit(map_img, (0, 0))
+        self.set_up_button("Back", path, clicked, 0)
+
+        self.refresh_screen()
+
+    def levels(self, level, clicked):
+        path = join(self.default_path, "Levels")
+        self.load_bg(path)
+        level_img = pygame.image.load(join(path, f"{level}.png"))
+        WIN.blit(level_img, (0, 0))
+        self.set_up_button("Back", path, clicked, 0)
+
+        self.refresh_screen()
+
 
 class Player:
     ANIMATION_DELAY = 3
@@ -96,6 +223,7 @@ class Player:
         self.left_arrow_press = 0
         self.right_arrow_press = 0
         self.secs_for_acc = 20
+        self.hit = False
 
     def reset_gravity(self):
         global GRAVITY
@@ -130,14 +258,18 @@ class Player:
             pass
 
     def update_state(self):
-        if self.y_vel < 0:
-            self.state = "Jump"
-        elif self.x_vel != 0:
-            self.state = "Run"
-        elif self.y_vel > 2:
-            self.state = "Fall"
+        if not self.hit:
+            if self.y_vel < 0:
+                self.state = "Jump"
+            elif self.x_vel != 0:
+                self.state = "Run"
+            elif self.y_vel > 2:
+                self.state = "Fall"
+            else:
+                self.state = "Idle"
         else:
-            self.state = "Idle"
+            if self.animation_count >= 14:
+                self.hit = False
         self.animation_count += 1
         sprite_sheet = self.SPRITES[f"{self.state}_{self.direction}"]
         sprite_num = (self.animation_count //
@@ -181,17 +313,46 @@ class Objects(pygame.sprite.Sprite):
         WIN.blit(self.image, (self.rect.x + OFFSET_X, self.rect.y))
 
 
+class Weirdies(Objects):
+    def __init__(self, x, y, width, height, specific_name, functional=False, inherent="On"):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.name = "Weirdies"
+        self.sprites = load_sprites(
+            join("Assets", "Weirdies", specific_name), width, height, False)
+        self.state = inherent
+        self.image = self.sprites[self.state][0]
+        self.mask = pygame.mask.from_surface(self.image)
+        self.count = 0
+        self.functional = functional
+        self.specific_name = specific_name
+
+    def update_mask(self):
+        self.mask = pygame.mask.from_surface(self.image)
+
+    def draw(self):
+        self.sprite_sheet = self.sprites[self.state]
+        self.image = self.sprite_sheet[self.count]
+
+        WIN.blit(self.image, (self.rect.x + OFFSET_X, self.rect.y))
+
+        self.update_mask()
+        if self.functional and self.state != "Off":
+            self.count += 1
+        if self.count >= len(self.sprite_sheet):
+            self.count = 0
+
+
 class Block(Objects):
-    def __init__(self, x, y, side):
+    def __init__(self, x, y, side, skin_name="Sci-Fi"):
         super().__init__(x, y, side, side, "Block")
+        self.skin_name = skin_name
         skin = self.load_block()
         self.image.blit(skin, (0, 0))
         self.mask = pygame.mask.from_surface(self.image)
 
     def load_block(self):
-        self.skin_name = "Pinky"
         path = join("Assets", "Terrain", f"{self.skin_name}.png")
-        return pygame.transform.scale2x(pygame.image.load(path))
+        return pygame.image.load(path)
 
     def update_skin(self):
         pass
@@ -440,6 +601,32 @@ class Opps():
             pass
 
 
+class Checkpoint():
+    def __init__(self, x, y, side):
+        self.state = "Idle"
+        self.rect = pygame.Rect(x, y, side, side)
+        self.sprites = load_sprites(
+            join("Assets", "Items", "Checkpoint"), side, side)
+        self.image = self.sprites[self.state][0]
+        self.name = "Checkpoint"
+        self.mask = pygame.mask.from_surface(self.image)
+        self.count = 0
+        self.waved = False
+
+    def draw(self):
+        self.sprite_sheet = self.sprites[self.state]
+        WIN.blit(self.sprite_sheet[self.count],
+                 (self.rect.x + OFFSET_X, self.rect.y))
+
+        if self.state == "Idle":
+            self.count = 0
+        else:
+            self.count += 1
+        if self.count >= len(self.sprites["Wave"]):
+            self.state = "Idle"
+            self.count = 0
+
+
 def handle_verti_collision(player, objects):
     collided_obj = None
     on_objects = False
@@ -484,7 +671,17 @@ def collide(player, objects, dx, fruit_names):
     return collided_obj
 
 
-def handle_overall_collision(collided_objs, fruits_names):
+def handle_overall_collision(collided_objs, fruits_names, player):
+
+    def harm_player():
+        if not player.hit:
+            player.hit = True
+            player.state = "Hit"
+            player.animation_count = 0
+        else:
+            pass
+        player.health -= 1
+
     global FRUIT_COUNT, N_LIVES
     for obj in collided_objs:
         if obj != None:
@@ -493,6 +690,21 @@ def handle_overall_collision(collided_objs, fruits_names):
                     obj.under_collection = True
                     obj.count = 0
                     FRUIT_COUNT += 1
+            elif obj.name == "Checkpoint":
+                if not obj.waved:
+                    obj.state = "Wave"
+                    obj.waved = True
+                else:
+                    pass
+                RESPAWN_POINTS.append([[obj.rect.x, obj.rect.y], OFFSET_X])
+            elif obj.name == "Weirdies":
+                sky_rocketers = ["Fan", "Trampoline"]
+                if obj.specific_name in sky_rocketers:
+                    player.y_vel *= -player.GRAVITY * 2
+                    player.gravity = 1
+                    obj.state = "On"
+                else:
+                    harm_player()
     else:
         pass
 
@@ -562,7 +774,7 @@ def handle_player(player, objects, fruit_names):
         player.jump()
 
     collided_objs = [right_collide, left_collide, verti_collide]
-    handle_overall_collision(collided_objs, fruit_names)
+    handle_overall_collision(collided_objs, fruit_names, player)
 
 
 def scroll_bg(player):
@@ -581,57 +793,90 @@ def scroll_bg(player):
 
 
 def generate_bg():
-    path = join("Assets", "Background", f"{BG_COLOR}.png")
-    piece = pygame.image.load(path)
-    for col in range(math.ceil(WIDTH/piece.get_width())):
-        for row in range(math.ceil(HEIGHT/piece.get_height())):
-            WIN.blit(piece, (col*piece.get_height(), row*piece.get_width()))
+    bg = pygame.image.load(join("Assets", "Background", "bg.jpg"))
+    WIN.blit(bg, (0, 0))
 
 
-def draw(player, objects, fruit_names, terrain, level, show_level):
+def draw(player, objects, fruit_names, terrain, level, show_level, max_respawn, clicked):
+    global RESPAWNED, GAME_OVER
     generate_bg()
 
-    player.draw()
+    if not GAME_OVER:
+        player.draw()
 
-    # The objects
+        # The objects
 
-    for obj in objects:
-        if obj.name in fruit_names:
-            if not obj.collected:
-                obj.update_skin()
-                obj.draw()
+        for obj in objects:
+            if obj.name in fruit_names:
+                if not obj.collected:
+                    obj.update_skin()
+                    obj.draw()
+                else:
+                    pass
+            elif obj.name == "Enemies" or obj.name == "Collectibles":
+                obj.draw(player, terrain)
             else:
-                pass
-        elif obj.name == "Enemies" or obj.name == "Collectibles":
-            obj.draw(player, terrain)
-        else:
-            obj.draw()
+                obj.draw()
 
-    # Fruit Basket
-    basket_path = join("Assets", "Items", "Fruits", "Basket.png")
-    basket = pygame.image.load(basket_path)
-    n_baskets = FRUIT_COUNT // N_IN_BASKET
+        space_between = 10
 
-    font_face = FONT.render(str(n_baskets), True, BLACK)
+        # Fruit Basket
+        basket_path = join("Assets", "Items", "Fruits", "Basket.png")
+        basket = pygame.image.load(basket_path)
+        font_face = FONT.render(str(FRUIT_COUNT), True, WHITE)
 
-    WIN.blit(font_face, (WIDTH-font_face.get_width(), 0))
-    WIN.blit(basket, (WIDTH-font_face.get_width()-basket.get_width(), 0))
+        WIN.blit(font_face, (WIDTH-font_face.get_width(), 0))
+        WIN.blit(basket, (WIDTH-font_face.get_width()-basket.get_width(), 0))
+        prev_x = WIDTH - (font_face.get_width()+basket.get_width())
 
-    # Lives
-    heart = pygame.image.load(join("Assets", "Items", "Heart.png"))
-    font_face = FONT.render(str(player.health), True, BLACK)
-    WIN.blit(heart, (0, 0))
-    WIN.blit(font_face, (heart.get_width(), 0))
+        # Lives
+        health = pygame.image.load(
+            join("Assets", "Items", "Health", f"{player.health}.png"))
+        prev_x -= health.get_width() + space_between
+        WIN.blit(health, (prev_x, 0))
 
-    if show_level:
-        path = join("Assets", "Levels", f"{level}.png")
-        WIN.blit(pygame.image.load(path), (0, 0))
+        respawn_img = pygame.image.load(
+            join("Assets", "Items", "Respawn", f"{max_respawn-RESPAWNED}.png"))
+        prev_x -= respawn_img.get_width() + space_between
+        WIN.blit(respawn_img, (prev_x, 0))
+
+        if show_level:
+            lev_img = pygame.image.load(
+                join("Assets", "Levels", f"{level}.png"))
+            WIN.blit(
+                lev_img, (WIDTH//2-(lev_img.get_width()//2), lev_img.get_height()))
+
+        # Back to the START!!!
+        home_bt = pygame.image.load(join("Assets", "Menus", "Home_button.png"))
+
+        wanna_return = check_button_click(
+            0, 0, home_bt.get_width(), home_bt.get_height(), clicked)
+        if wanna_return:
+            set_up_menu("Start")
+            home_bt = pygame.image.load(
+                join("Assets", "Menus", "Home_pressed.png"))
+
+        WIN.blit(home_bt, (0, 0))
+
+        if player.health <= 0:
+            if RESPAWNED < max_respawn:
+                player.right_arrow_press, player.left_arrow_press = 0, 0
+                player.health = PLAYER_HEALTH
+                x_y, offset = RESPAWN_POINTS[-1]
+                reset_OFFSET(offset)
+                player.rect.x, player.rect.y = x_y[0], x_y[1]
+                RESPAWNED += 1
+            else:
+
+                GAME_OVER = True
+    else:
+        game_over_path = join("Assets", "Menus", "GameOver")
+        game_over_img = pygame.image.load(join(game_over_path, "Main.png"))
+        g_x, g_y = WIDTH//2 - game_over_img.get_width()//2, HEIGHT//2 - \
+            game_over_img.get_height()//2
+        WIN.blit(game_over_img, (g_x, g_y))
 
     pygame.display.update()
-
-    if player.health <= 0:
-        pygame.time.delay(100)
-        quit()
 
 
 def check_level_passed(to_collect):
@@ -642,67 +887,120 @@ def check_level_passed(to_collect):
     return level_passed
 
 
-def game_code(player, objects, fruit_names, terrain, to_collect, level, show_level):
+def show_victory(level):
+    win_img = pygame.image.load(join("Assets", "Menus", "Win", f"{level}.png"))
+    WIN.blit(win_img, (0, 0))
+
+    pygame.display.update()
+    pygame.time.delay(3000)
+
+
+def game_code(player, objects, fruit_names, terrain, to_collect, level, show_level, max_respawn, clicked):
+    level_passed = False
     level_passed = check_level_passed(to_collect)
     if not level_passed:
         player.loop()
         handle_player(player, objects, fruit_names)
         scroll_bg(player)
-        draw(player, objects, fruit_names, terrain, level, show_level)
+        draw(player, objects, fruit_names, terrain,
+             level, show_level, max_respawn, clicked)
     else:
-        read_file = open("level.txt", "r")
-        level = int(read_file.read())
-        read_file.close()
         level += 1
         write_file = open("level.txt", "w")
         write_file.write(str(level))
         write_file.close()
+        fruit_file = open("fruit_count.txt", "w")
+        fruit_file.write(str(FRUIT_COUNT))
+        fruit_file.close()
+
+        show_victory(level-1)
+        main()
 
 
 def main():
+    global RESPAWNED
     run = True
     clock = pygame.time.Clock()
 
-    player = Player(500, 0, 32, 32, "Mask Dude")
+    player_spawn_x, player_spawn_y = WIDTH//2 - 32, HEIGHT//2-32
+    player = Player(player_spawn_x, player_spawn_y, 32, 32, "Mask Dude")
+    RESPAWN_POINTS.append([[player_spawn_x, player_spawn_y], 0])
 
     # Game Objs Definition
 
     # Blocks
-    terrain, enemies, to_collect, mount_blocks, wierdies, level = set_level(
-        Block, Opps, WIDTH, HEIGHT)
+    terrain, mount_blocks, fruit_blocks, to_collect, enemies, weirdies, checkpoints, level = set_level(
+        Block, Opps, Checkpoint, Weirdies, WIDTH, HEIGHT)
 
     # Fruits
-    ordinary_fruits = ["Kiwi", "Apple", "Cherries",
-                       "Bananas", "Melon", "Pineapple", "Strawberry"]
-    fruit_side = 64
-    fruits = []
+    if level <= 9:
+        ordinary_fruits = ["Kiwi", "Apple", "Cherries",
+                           "Bananas", "Melon", "Pineapple", "Strawberry"]
+        fruit_side = 64
+        fruits = []
 
-    level_counter = 0
-    level_on_air_time = 60
+        level_counter = 0
+        level_on_air_time = 60
 
-    for block in mount_blocks:
-        fruit = random.choice(ordinary_fruits)
-        x = math.ceil(block.rect.x + (96/2 - (fruit_side/2)))
-        y = block.rect.y - fruit_side
-        fruits.append(Fruit(x, y, fruit_side, fruit))
+        for block in fruit_blocks:
+            fruit = random.choice(ordinary_fruits)
+            x = math.ceil(block.rect.x + ((96-fruit_side)//2))
+            y = block.rect.y - fruit_side
+            fruits.append(Fruit(x, y, fruit_side, fruit))
 
+        objects = [*fruits, *weirdies, *terrain, *
+                   mount_blocks, *enemies, *checkpoints, to_collect]
+
+        RESPAWNED = 0
+        reset_OFFSET()
+
+        RESPAWN_POINTS.append([[500, 500], OFFSET_X])
+        max_respawn = 3
+
+    # MENU STUFF!!!
+    menu_cls = Menus(50)
     while run:
         clock.tick(FPS)
+        clicked = (0, 0)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                run = False
-        # if menu.IS_MENU:
-            # menu.draw(pygame, WIN, icon, WIDTH, HEIGHT)
-        # else:
-
-        if level_counter <= level_on_air_time:
-            level_counter += 1
-            show_level = True
+                quit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                clicked = pygame.mouse.get_pos()
+        if not GAME_START:
+            if START_MENU:
+                menu_cls.start(clicked)
+            elif LEVELS_MENU:
+                menu_cls.levels(level, clicked)
+            elif MAP_MENU:
+                menu_cls.map(level, clicked)
         else:
-            show_level = False
-        objects = [*terrain, *mount_blocks,  *fruits, *enemies, to_collect]
-        game_code(player, objects, ordinary_fruits,
-                  terrain, to_collect, level, show_level)
+            if level <= 9:
+                if level_counter <= level_on_air_time:              # This means the title of the menu!
+                    level_counter += 1
+                    show_level = True
+                else:
+                    show_level = False
+                game_code(player, objects, ordinary_fruits,
+                          terrain, to_collect, level, show_level, max_respawn, clicked)
+            else:
+                generate_bg()
+                complete_img = pygame.image.load(
+                    join("Assets", "Menus", "Completed.png"))
+                WIN.blit(complete_img, (0, 0))
+
+                home_bt = pygame.image.load(
+                    join("Assets", "Menus", "Home_button.png"))
+
+                wanna_return = check_button_click(
+                    0, 0, home_bt.get_width(), home_bt.get_height(), clicked)
+                if wanna_return:
+                    set_up_menu("Start")
+                    home_bt = pygame.image.load(
+                        join("Assets", "Menus", "Home_pressed.png"))
+
+                WIN.blit(home_bt, (0, 0))
+                pygame.display.update()
 
 
 if __name__ == "__main__":

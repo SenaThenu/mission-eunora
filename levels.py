@@ -1,50 +1,6 @@
 import math
 import random
 
-min_platform_len = 2
-max_platform_len = 5
-
-# TODO: The enemy generator genearates all the enemies at one place...
-
-
-# def gen_ground(Block, mx_linear, value_range, HEIGHT, side, max_jump):
-#     block_list = []
-#     used_x = []
-#     used_y = []
-
-#     def select_pos():
-#         platform_len = random.randint(min_platform_len, max_platform_len)
-#         x = random.randrange(0, value_range - (side*max_platform_len), side)
-#         while x in used_x:
-#             x = random.randrange(
-#                 0, value_range - (side*max_platform_len), side)
-#         y = random.randrange(max_jump, HEIGHT-(side*3), side)
-#         for i in range(platform_len):
-#             used_x.append(x + (side * i))
-#         return platform_len, x, y
-
-#     for i in range(mx_linear):
-#         platform_len, x, y = select_pos()
-#         for num in range(platform_len):
-#             block_list.append(Block(x + side*num, y, side))
-
-#     return block_list
-
-
-# def terrain_generator(level, Block, side, max_jump, WIDTH, HEIGHT):
-#     terrain = []
-#     if level == 1:
-#         value_range = WIDTH*3
-#         floor = [Block(i*side, HEIGHT-side, side)
-#                  for i in range(-5, value_range//side)]
-#         mx_linear = 6
-#         blocks = gen_ground(Block, mx_linear, value_range,
-#                             HEIGHT, side, max_jump)
-
-#         terrain = [*floor, *blocks]
-
-#     return terrain, floor, blocks
-
 
 def generate_terrain(HEIGHT, Block, min_x, max_x, side):
     terrain = [Block(i*side, HEIGHT-side, side)
@@ -52,8 +8,50 @@ def generate_terrain(HEIGHT, Block, min_x, max_x, side):
     return terrain
 
 
-def generate_wierd_stuff():
-    pass
+# In each (start, end)
+def generate_weird_stuff(Weirdies, weird_cors, weird_area, block_side, HEIGHT, Block):
+    weird_list = []
+    fruit_blocks = []
+    weird_info = {
+        "Fan": [HEIGHT - block_side - (8*2), 24, 8, "Fan", True, "Off"],
+        "Trampoline": [HEIGHT - block_side - (28*2), 28, 28, "Trampoline", True, "Off"],
+        "Platform": [HEIGHT - block_side - (96*2), 96, "Platform"],
+        "Saw": [HEIGHT - block_side - (38*2), 38, 38, "Saw", True],
+        "Fire": [HEIGHT - block_side - (32*2), 16, 32, "Fire", True],
+        "Spikes": [HEIGHT - block_side - (16*2), 16, 16, "Spikes", True],
+        "Spiked Balls": [HEIGHT - block_side - (28*2), 28, 28, "Spiked Balls", True]
+    }
+    for cor in weird_cors:
+        flyer = random.choice(["Fan", "Trampoline"])
+        bottom_danger = random.choice(
+            ["Spikes", "Spiked Balls", "Saw", "Fire"])
+
+        start, end = cor
+
+        flyer_info = weird_info.get(flyer)
+        flyer_width = flyer_info[1] * 2  # WIDTH :)
+
+        weird_list.append(Weirdies(end-(flyer_width//2), *flyer_info))
+
+        bottom_danger_info = weird_info.get(bottom_danger)
+        bottom_danger_width = bottom_danger_info[1]
+
+        for trap_x in range(start, end-flyer_width*2, (bottom_danger_width*2)):
+            weird_list.append(Weirdies(trap_x, *bottom_danger_info))
+
+        max_blocks = weird_area // 96 - 1
+        n_blocks = random.randint(2, max_blocks)
+
+        block_start_x = start + \
+            (((end-flyer_width) - start) - (n_blocks * 96))//2
+
+        for block_num in range(n_blocks):
+            block = Block(block_start_x + (block_num * block_side),
+                          *weird_info["Platform"])
+            weird_list.append(block)
+            fruit_blocks.append(block)
+
+    return weird_list, fruit_blocks
 
 
 def generate_mount(Block, n_bottom_row, block_side, start_x, HEIGHT):
@@ -70,7 +68,7 @@ def generate_mount(Block, n_bottom_row, block_side, start_x, HEIGHT):
     return block_list
 
 
-def obj_generator(Block, Opps, WIDTH, min_x, n_enemies, block_side, n_bottom_row, level, HEIGHT):
+def obj_generator(Block, Opps, Checkpoint, Weirdies, WIDTH, min_x, n_enemies, block_side, n_bottom_row, level, HEIGHT):
     max_x = WIDTH // 2
 
     enemy_list = {1: ["Rocks"],
@@ -97,9 +95,12 @@ def obj_generator(Block, Opps, WIDTH, min_x, n_enemies, block_side, n_bottom_row
     block_add = [max_x]
     mount_blocks = []
 
-    wierd_enumerates = [i for i in range(0, n_enemies, 2)]
-    wierd_cors = []
-    wierd_area = 500
+    checkpoint_enumearates = [i for i in range(0, n_enemies, 3)]
+    checkpoints = []
+
+    weird_enumerates = [i for i in range(0, n_enemies, 2)]
+    weird_cors = []
+    weird_area = 500
 
     for i in range(n_enemies):
         ene_name = random.choice(enemy_names)
@@ -116,34 +117,43 @@ def obj_generator(Block, Opps, WIDTH, min_x, n_enemies, block_side, n_bottom_row
 
         max_x += block_side * n_bottom_row + enemy_area
 
-        if i in wierd_enumerates:
-            wierd_cors.append((max_x, max_x + wierd_area))
-            max_x += wierd_area
+        if i in checkpoint_enumearates:
+            cp_side = 64
+            max_x += cp_side * 2
+            checkpoints.append(Checkpoint(
+                max_x, HEIGHT-block_side-(cp_side*2), cp_side))
+            max_x += cp_side * 4
 
-        block_add.append(max_x + 50)
+        if i in weird_enumerates:
+            weird_cors.append((max_x, max_x + weird_area))
+            max_x += weird_area
+
+        max_x += 50
+        block_add.append(max_x)
 
     # The Collectibles
+    max_x += block_side * n_bottom_row
     space_for_danger = 750
+    weird_cors.append((max_x, max_x + space_for_danger))
     max_x += space_for_danger
-
-    danger_start = max_x
 
     collectible_dic = {1: [(max_x + 200) - 38, HEIGHT-block_side-24*2, 38, 24, "Snail", "Collectibles", 3, 100, 3, False, 2, True],        # Format this to be the arguments for Opps()
                        2: [(max_x + 200) - 44, HEIGHT-block_side-20*2, 44, 20, "Turtle", "Collectibles", 3, 0, 3, True],
                        3: [(max_x + 200) - 40, HEIGHT-block_side-48*2, 40, 48, "FatBird", "Collectibles", 4, 0, 3, True],
                        4: [(max_x + 350) - 30, HEIGHT-block_side-38*2, 30, 38, "Radish", "Collectibles", 4, 350, 3, False, 4, True],
                        5: [(max_x + 500) - 32, HEIGHT-block_side-32*2, 32, 32, "Mushroom", "Collectibles", 5, 500, 3, False, 10, True],
-                       6: [(max_x + 750) - 52, HEIGHT-block_side-104*2, 52, 54, "Skull", "Collectibles", 5, 750, 3, False, 15, True],
-                       7: [(max_x + 800) - 84, HEIGHT-block_side-38*2, 84, 38, "Chameloen", "Collectibles", 5, 800, 3, False, 8, True],
+                       6: [(max_x + 750) - 52, HEIGHT-block_side-54*2, 52, 54, "Skull", "Collectibles", 5, 750, 3, False, 7, True],
+                       7: [(max_x + 800) - 84, HEIGHT-block_side-38*2, 84, 38, "Chameleon", "Collectibles", 5, 800, 3, False, 8, True],
                        8: [(max_x + 1000) - 64, HEIGHT-block_side-32*2, 64, 32, "Trunk", "Collectibles", 5, 1000, 3, True, 0, True, True, 5, 20],
                        9: [(max_x + 1250) - 44, HEIGHT-block_side-42*2, 44, 42, "Plant", "Collectibles", 5, 1250, 3, True, 0, True, True, 5, 20]}
     collecti = collectible_dic.get(level)
 
     to_collect = Opps(*collecti)
 
-    max_x += collecti[7] * 2 + (collecti[2]*2) + \
-        space_for_danger        # [7] = Coverage
-    danger_end = max_x
+    max_x += collecti[7] * 2 + (collecti[2]*2)
+    #weird_cors.append((max_x, max_x+space_for_danger))
+
+    max_x += space_for_danger
     block_add.append(max_x)
     max_x += block_side * n_bottom_row
 
@@ -152,40 +162,43 @@ def obj_generator(Block, Opps, WIDTH, min_x, n_enemies, block_side, n_bottom_row
         for block in mount:
             mount_blocks.append(block)
 
-    wierdies = generate_wierd_stuff()
+    weirdies, fruit_blocks = generate_weird_stuff(
+        Weirdies, weird_cors, weird_area, block_side, HEIGHT, Block)
 
     terrain = generate_terrain(HEIGHT, Block, min_x, max_x, block_side)
 
-    return terrain, enemies, to_collect, mount_blocks, wierdies
+    return terrain, enemies, to_collect, mount_blocks, fruit_blocks, weirdies, checkpoints
 
 
-def set_level(Block, Opps, WIDTH, HEIGHT):
+def set_level(Block, Opps, Checkpoint, Weirdies, WIDTH, HEIGHT):
     block_side = 96
 
     f = open("level.txt", "r")
     level = int(f.readline())
 
     min_x = -WIDTH
+    if level <= 9:
+        level_info = {                      # 3...
+            1: 1,
+            2: 1,
+            3: 1,
+            4: 1,
+            5: 1,
+            6: 1,
+            7: 1,
+            8: 1,
+            9: 1
+        }
 
-    level_info = {
-        1: 2,
-        2: 6,
-        3: 7,
-        4: 8,
-        5: 9,
-        6: 10,
-        7: 11,
-        8: 12,
-        9: 13
-    }
+        n_bottom_row = 6
+        n_enemies = level_info.get(level)
+        terrain, enemies, to_collect, mount_blocks, fruit_blocks, weirdies, checkpoints = obj_generator(
+            Block, Opps, Checkpoint, Weirdies, WIDTH, min_x, n_enemies, block_side, n_bottom_row, level, HEIGHT)
 
-    n_bottom_row = 6
-    n_enemies = level_info.get(level)
-    terrain, enemies, to_collect, mount_blocks, wierdies = obj_generator(
-        Block, Opps, WIDTH, min_x, n_enemies, block_side, n_bottom_row, level, HEIGHT)
+        for i in range(1, math.ceil((HEIGHT)/block_side)):
+            terrain.append(
+                Block(terrain[0].rect.x, terrain[0].rect.y - (block_side*i), block_side))
 
-    for i in range(1, math.ceil((HEIGHT)/block_side)):
-        terrain.append(
-            Block(terrain[0].rect.x, terrain[0].rect.y - (block_side*i), block_side))
-
-    return terrain, mount_blocks, to_collect, enemies, wierdies, level
+        return terrain, mount_blocks, fruit_blocks, to_collect, enemies, weirdies, checkpoints, level
+    else:
+        return None, None, None, None, None, None, None, 10
