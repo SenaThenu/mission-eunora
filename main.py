@@ -964,7 +964,7 @@ def main():
         clicked = (0, 0)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                quit()
+                exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 clicked = pygame.mouse.get_pos()
         if not GAME_START:
