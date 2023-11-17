@@ -1,10 +1,10 @@
 # _Mission Eunora_
 ---
 
-- [Xcravature]([url](https://xcravature.substack.com/)), the spaceship has run into a bug in its engine! So as to fix it, the captain has planned to send one of the crewmates to the nearest planet, Eunora.
+- [Xcravature](https://xcravature.substack.com/), the spaceship has run into a bug in its engine! So as to fix it, the captain has planned to send one of the crewmates to the nearest planet, Eunora.
 
-- In each level, the crewmate is supposed to find a specific ingredient for repariment of the engine.
-- As 9 ingredients are required, the crewmate has to thrive in nine levels fighting against different enemies present in the planet.
+- In each level, the crewmate is supposed to find a specific ingredient for the repairment of the engine.
+- As 9 ingredients are required, the crewmate has to thrive in nine levels fighting against different enemies present on the planet.
 
 
 ## Levels
